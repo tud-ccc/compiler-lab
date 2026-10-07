@@ -1,0 +1,12 @@
+.pixi/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+tests/filecheck/**/Output/
+.lit_test_times.txt
+examples/weights/
+examples/out/
+.doit.db*
+tasks/*/out/

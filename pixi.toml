@@ -1,0 +1,88 @@
+[workspace]
+name = "algeco"
+description = "algeco: the algebra compiler of the Compilerbau Lab (TU Dresden, CCC)"
+authors = ["Clement Fournier", "Lars Schütze"]
+channels = ["conda-forge"]
+# Windows users: please work inside WSL2 (linux-64).
+platforms = ["linux-64", "linux-aarch64", "osx-arm64"]
+requires-pixi = ">=0.50"
+
+# --------------------------------------------------------------------------
+# Default dependencies: everything needed to build and run algeco
+# --------------------------------------------------------------------------
+[dependencies]
+python = "3.13.*"
+numpy = ">=2.1"
+# Backend toolchain. Keep these on the same LLVM major version.
+mlir = "23.*"        # mlir-opt, mlir-translate, mlir-runner + runtime libs
+llvm-tools = "23.*"  # llc, opt, llvm-objdump, llvm-mca, ...
+clang = "23.*"       # compile/link the generated LLVM IR, cross-compile to RISC-V
+lld = "23.*"
+# Reference baseline for performance comparisons: NumPy on plain OpenBLAS, never
+# Accelerate or MKL, which use hardware our compiler doesn't target (matrix units).
+libblas = { version = "*", build = "*openblas" }
+
+# OpenBLAS >= 0.3.31 uses the SME matrix unit of Apple M4/M5 for sgemm. Stay on
+# NEON so NumPy is a fair baseline for vectorized code.
+[target.osx-arm64.dependencies]
+libopenblas = "<0.3.31"
+
+[pypi-dependencies]
+# xDSL is not packaged on conda-forge. We pin a minor version so that
+# every student sees the same API during the semester.
+xdsl = "~=0.72.0"
+algeco = { path = ".", editable = true }
+
+[activation.env]
+# Lets the backend find the MLIR runtime libraries (memref printing etc.).
+ALGECO_MLIR_LIB_DIR = "$CONDA_PREFIX/lib"
+
+[tasks]
+algeco = { cmd = "algeco", description = "Run the algeco driver" }
+# algeco's generated code is single-threaded, so the NumPy/BLAS baseline is too.
+# Only for benchmarks: OpenBLAS and OpenMP read these once at load time, and
+# PyTorch training (examples/image_mlp.py) needs all cores.
+mlp = { cmd = "python examples/mlp.py", description = "Run the MLP example end-to-end", env = { OPENBLAS_NUM_THREADS = "1", OMP_NUM_THREADS = "1" } }
+task1 = { cmd = "python tasks/task1/run.py", description = "Task 1 testbed: your interchange pass on the MLP", env = { OPENBLAS_NUM_THREADS = "1", OMP_NUM_THREADS = "1" } }
+
+# --------------------------------------------------------------------------
+# Development / grading feature
+# --------------------------------------------------------------------------
+[feature.dev.dependencies]
+pytest = ">=8"
+lit = "23.*"
+ruff = ">=0.8"
+
+[feature.dev.pypi-dependencies]
+filecheck = "~=1.0"  # Python reimplementation of LLVM FileCheck (used by xDSL too)
+
+[feature.dev.tasks]
+test = { cmd = "pytest", description = "Run Python unit tests" }
+filecheck = { cmd = "lit -v tests/filecheck", description = "Run FileCheck IR tests" }
+test-all = { depends-on = ["test", "filecheck"], description = "Run all tests" }
+lint = { cmd = "ruff check src tests examples tasks", description = "Lint the code" }
+fmt = { cmd = "ruff format src tests examples tasks", description = "Format the code" }
+
+# --------------------------------------------------------------------------
+# Notebooks (opening session: naive loops vs NumPy vs Numba)
+# --------------------------------------------------------------------------
+[feature.notebook.dependencies]
+jupyterlab = ">=4"
+ipykernel = "*"
+numba = ">=0.61"
+matplotlib-base = ">=3.9"
+scikit-learn = ">=1.5"  # only for bundled sample data (8x8 digits, china.jpg), no download
+# Trains the image-fitting MLP (examples/image_mlp.py); algeco only runs inference.
+pytorch = ">=2.5"
+doit = ">=0.36"  # trains the example models once (examples/dodo.py)
+cyclopts = ">=5"  # command lines from function signatures (examples)
+
+[feature.notebook.tasks]
+lab = { cmd = "jupyter lab notebooks/", description = "Open the course notebooks" }
+examples = { cmd = "doit -f examples/dodo.py", description = "Train the example models (once), render them with algeco" }
+
+[environments]
+# Students get dev + notebook by default: tests are part of the assignments.
+default = { features = ["dev", "notebook"], solve-group = "main" }
+# Minimal runtime environment (e.g. for CI that only runs examples).
+runtime = { features = [], solve-group = "main" }

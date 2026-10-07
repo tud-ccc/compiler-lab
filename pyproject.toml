@@ -1,0 +1,32 @@
+[project]
+name = "algeco"
+version = "0.1.0"
+description = "algeco: the algebra compiler of the Compilerbau Lab"
+requires-python = ">=3.12"
+# Dependencies are provided by pixi (see pixi.toml); xdsl is listed here so
+# the package metadata is honest when installed outside of pixi.
+dependencies = ["xdsl", "numpy"]
+
+[project.scripts]
+algeco = "algeco.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/algeco"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# CHECK lines must match the IR exactly, however long it is.
+"tests/filecheck/**" = ["E501"]
