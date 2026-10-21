@@ -1,8 +1,9 @@
-"""Task 1 testbed: loop interchange on the digit MLP.
+"""Task 1 testbed: the loop passes on the digit MLP.
 
-    pixi run task1                     # baseline vs. interchange
-    pixi run task1 --llvm-vectorize    # + both again, with LLVM's vectorizers
-    pixi run task1 --passes 'algeco-interchange{order=2,0,1}'   # force an order
+    pixi run task1                     # every stage below
+    pixi run task1 --llvm-vectorize    # + every stage again, with LLVM's vectorizers
+    pixi run task1 --batch 1024        # a batch that doesn't fit in the cache
+    pixi run task1 --passes 'algeco-interchange,algeco-tile{sizes=16,16,64}'
 
 See README.md in this directory for where your code and its tests are.
 """
@@ -32,7 +33,7 @@ def inputs(batch: int) -> list[np.ndarray]:
 
 
 TASK = Task(
-    title="Task 1: loop interchange",
+    title="Task 1: loop optimizations",
     description="Model: digit MLP, relu(x @ w1 + b1) @ w2 + b2, 64 -> 256 -> 10",
     model=mlp,
     numpy_model=numpy_mlp,
@@ -40,8 +41,14 @@ TASK = Task(
     stages=[
         Stage("baseline", ""),
         Stage("interchange", "algeco-interchange"),
+        Stage("strip-mine", "algeco-interchange,algeco-strip-mine"),
+        Stage("tile", "algeco-interchange,algeco-tile"),
+        Stage("fuse", "algeco-fuse-loops"),
+        # The pipeline experiment: the same passes in both orders.
+        Stage("fuse, then tile", "algeco-fuse-loops,algeco-interchange,algeco-tile"),
+        Stage("tile, then fuse", "algeco-interchange,algeco-tile,algeco-fuse-loops"),
     ],
-    # Loops have strict floating point: interchange keeps the order of every
+    # Loops have strict floating point: every pass keeps the order of every
     # sum, so results must be bit-identical to the baseline.
     exact=True,
 )

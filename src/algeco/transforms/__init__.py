@@ -17,6 +17,11 @@ def _algeco_passes() -> dict[str, Callable[[], type[ModulePass]]]:
 
         return InterchangePass
 
+    def strip_mine():
+        from algeco.transforms.tiling import StripMinePass
+
+        return StripMinePass
+
     def tiling():
         from algeco.transforms.tiling import TileLoopsPass
 
@@ -34,6 +39,7 @@ def _algeco_passes() -> dict[str, Callable[[], type[ModulePass]]]:
 
     return {
         "algeco-interchange": interchange,
+        "algeco-strip-mine": strip_mine,
         "algeco-tile": tiling,
         "algeco-fuse-loops": fusion,
         "algeco-vectorize": vectorize,

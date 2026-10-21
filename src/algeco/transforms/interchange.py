@@ -198,13 +198,47 @@ def is_legal(accesses: Sequence[Access], order: Sequence[int]) -> bool:
 FLOATS_PER_CACHE_LINE = 16  # 64-byte cache lines, float32
 
 
+def cache_lines_per_iteration(
+    loop: int, accesses: Sequence[Access], trips: Sequence[int]
+) -> float:
+    """How many cache lines one iteration of `loop` touches, if it were innermost.
+
+    Count the lines one full run of the loop touches, per (distinct) access:
+
+    - the loop's variable not in the access: the same element every time, 1 line
+    - the variable only in the last index: consecutive elements, trips / 16 lines
+    - otherwise: a jump of at least a row per iteration, `trips` lines
+
+    and divide by the trip count, so that loops of different lengths compare.
+    """
+    trip = trips[loop]
+    if trip == 0:
+        return 0.0
+    lines = 0
+    for _buffer, dims in {(a.buffer, a.dims) for a in accesses}:
+        if loop not in dims:
+            lines += 1
+        elif dims[-1] == loop and loop not in dims[:-1]:
+            lines += -(-trip // FLOATS_PER_CACHE_LINE)  # ceil
+        else:
+            lines += trip
+    return lines / trip
+
+
 def choose_order(accesses: Sequence[Access], trips: Sequence[int]) -> tuple[int, ...]:
     """The loop order with the cheapest loops innermost (new position -> old loop).
 
     Sorting is stable, so loops with equal cost keep their current order, and
     a nest that is already in the best order gets the identity.
     """
-    pass
+    loops = range(len(trips))
+    return tuple(
+        sorted(
+            loops,
+            key=lambda loop: cache_lines_per_iteration(loop, accesses, trips),
+            reverse=True,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +255,28 @@ def interchange(
     `nest[order[d]]`, move the innermost body into it, and make every use of an
     old loop variable use the corresponding new one.
     """
-    pass
+    old_ivs = [loop.body.block.args[0] for loop in nest]
+
+    new_loops: list[scf.ForOp] = []
+    for old_loop_number in order:
+        old = nest[old_loop_number]
+        body = Block(arg_types=[IndexType()])
+        body.args[0].name_hint = old_ivs[old_loop_number].name_hint
+        new_loops.append(scf.ForOp(old.lb, old.ub, old.step, [], body))
+    for outer, inner in pairwise(new_loops):
+        outer.body.block.add_ops([inner, scf.YieldOp()])
+    new_ivs = [new_loops[order.index(n)].body.block.args[0] for n in range(len(nest))]
+
+    for old_iv, new_iv in zip(old_ivs[:-1], new_ivs[:-1], strict=True):
+        rewriter.replace_all_uses_with(old_iv, new_iv)
+    # Moves the innermost body, including its scf.yield, into the new innermost loop.
+    rewriter.inline_block(
+        nest[-1].body.block,
+        InsertPoint.at_end(new_loops[-1].body.block),
+        arg_values=[new_ivs[-1]],
+    )
+    rewriter.insert(new_loops[0], InsertPoint.before(nest[0]))
+    rewriter.erase(nest[0])
 
 
 # ---------------------------------------------------------------------------
@@ -241,10 +296,10 @@ class InterchangeNest(RewritePattern):
             return  # Only start at the outermost loop of a nest
         nest = perfect_nest(op)
         if nest is None or len(nest) < 2:
-            return # Not a perfect loop nest.
+            return  # Not a perfect loop nest.
         accesses = extract_accesses(nest)
         if accesses is None:
-            return # Accesses too complex for our logic
+            return  # Accesses too complex for our logic
         if self.forced_order:
             order = self.forced_order
             if sorted(order) != list(range(len(nest))):
@@ -254,7 +309,7 @@ class InterchangeNest(RewritePattern):
             order = choose_order(accesses, trip_counts(nest))
 
         if list(order) == list(range(len(nest))) or not is_legal(accesses, order):
-            return # No change needed, or illegal
+            return  # No change needed, or illegal
 
         # Apply the interchange
         interchange(nest, order, rewriter)

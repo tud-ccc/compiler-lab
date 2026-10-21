@@ -13,6 +13,7 @@ Every stage is compiled with `dump=`, so the IR after each pass is in
 
 import argparse
 import re
+import shutil
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -114,6 +115,7 @@ def run_stage(
     repeat: int,
 ) -> tuple[Result, np.ndarray | None]:
     """Compile, check and time one stage. Never raises: errors become FAILED."""
+    shutil.rmtree(out / stage.directory, ignore_errors=True)  # dumps of earlier runs
     jitted = algeco.jit(
         task.model,
         passes=stage.passes,

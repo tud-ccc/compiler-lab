@@ -43,7 +43,7 @@ algeco = { cmd = "algeco", description = "Run the algeco driver" }
 # Only for benchmarks: OpenBLAS and OpenMP read these once at load time, and
 # PyTorch training (examples/image_mlp.py) needs all cores.
 mlp = { cmd = "python examples/mlp.py", description = "Run the MLP example end-to-end", env = { OPENBLAS_NUM_THREADS = "1", OMP_NUM_THREADS = "1" } }
-task1 = { cmd = "python tasks/task1/run.py", description = "Task 1 testbed: your interchange pass on the MLP", env = { OPENBLAS_NUM_THREADS = "1", OMP_NUM_THREADS = "1" } }
+task1 = { cmd = "python tasks/task1/run.py", description = "Task 1 testbed: your loop passes on the MLP", env = { OPENBLAS_NUM_THREADS = "1", OMP_NUM_THREADS = "1" } }
 
 # --------------------------------------------------------------------------
 # Development / grading feature
